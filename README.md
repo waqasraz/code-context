@@ -56,6 +56,8 @@ Where:
 - `--ignore <PATTERN>`: Glob patterns for files/directories to ignore (repeatable)
 - `--show-tree`: Include a directory tree structure in the output
 - `--use-embeddings`: Use embedding-based relevance detection for more accurate results
+- `--use-hybrid`: Use hybrid approach combining embeddings with keywords and path relevance (default: true)
+- `--no-hybrid`: Disable hybrid relevance detection and use pure embeddings or keywords
 - `--embedding-model <MODEL>`: Model to use for embeddings (default: "nomic-embed-text")
 - `--embedding-url <URL>`: URL for embedding API (default: "http://localhost:11434/api/embeddings")
 
@@ -130,6 +132,16 @@ Use AI embeddings to find semantically relevant files, providing more accurate r
 code-context ./my-project/ "Explain the authentication flow" \
   --use-embeddings \
   --embedding-model nomic-embed-text
+```
+
+### Use hybrid relevance detection (recommended)
+
+Combines the power of embeddings with traditional keyword matching and path relevance for optimal results:
+
+```bash
+code-context ./my-project/ "Explain the authentication flow" \
+  --use-hybrid \
+  --embedding-model llama3-embed
 ```
 
 ## LLM Integration

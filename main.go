@@ -38,6 +38,7 @@ func main() {
 	llmProvider := flag.String("llm-provider", "", "LLM provider to use: 'openai', 'local', 'unified', or empty for placeholder.")
 	llmModel := flag.String("llm-model", "", "Model name to use with the LLM provider.")
 	useEmbeddings := flag.Bool("use-embeddings", false, "Use embedding-based relevance detection for more accurate results.")
+	useHybridSearch := flag.Bool("use-hybrid", true, "Use hybrid approach combining embeddings with traditional relevance metrics.")
 	embeddingModel := flag.String("embedding-model", "nomic-embed-text", "Model to use for embeddings when --use-embeddings is enabled.")
 	embeddingURL := flag.String("embedding-url", "http://localhost:11434/api/embeddings", "URL for embedding API when --use-embeddings is enabled.")
 	var llmHeaders stringSlice
@@ -183,7 +184,8 @@ func main() {
 	fmt.Printf("LLM API Key Set: %t\n", *llmApiKey != "")
 	fmt.Printf("LLM Endpoint Set: %t\n", *llmEndpoint != "")
 	fmt.Printf("Using Embeddings: %t\n", *useEmbeddings)
-	if *useEmbeddings {
+	fmt.Printf("Using Hybrid Search: %t\n", *useHybridSearch)
+	if *useEmbeddings || *useHybridSearch {
 		fmt.Printf("Embedding Model: %s\n", *embeddingModel)
 		fmt.Printf("Embedding URL: %s\n", *embeddingURL)
 	}
@@ -226,6 +228,18 @@ func main() {
 		if arg == "--use-embeddings" {
 			*useEmbeddings = true
 			fmt.Println("DEBUG: Found --use-embeddings flag, enabling embedding-based relevance detection")
+			break
+		}
+	}
+
+	// Manual detection of --use-hybrid flag
+	for _, arg := range os.Args {
+		if arg == "--use-hybrid" {
+			*useHybridSearch = true
+			fmt.Println("DEBUG: Found --use-hybrid flag, enabling hybrid relevance detection")
+		} else if arg == "--no-hybrid" {
+			*useHybridSearch = false
+			fmt.Println("DEBUG: Found --no-hybrid flag, disabling hybrid relevance detection")
 			break
 		}
 	}
@@ -283,17 +297,41 @@ func main() {
 	var relevantFileInfos []relevance.FileInfo
 	var relevanceErr error
 
-	if *useEmbeddings {
-		fmt.Println("Using embedding-based relevance detection for more accurate results...")
-		embeddingOpts := relevance.EmbeddingOptions{
-			Query:           query,
-			TargetPath:      absTargetPath,
-			CandidateFiles:  foundFiles,
-			MaxFilesToCheck: 20, // Consider top 20 most relevant files
-			EmbeddingModel:  *embeddingModel,
-			EmbeddingURL:    *embeddingURL,
-		}
+	// Configure embedding options if using embeddings or hybrid search
+	embeddingOpts := relevance.EmbeddingOptions{
+		Query:           query,
+		TargetPath:      absTargetPath,
+		CandidateFiles:  foundFiles,
+		MaxFilesToCheck: 20, // Consider top 20 most relevant files
+		EmbeddingModel:  *embeddingModel,
+		EmbeddingURL:    *embeddingURL,
+	}
 
+	if *useHybridSearch {
+		// Use hybrid approach (embeddings + keywords + path relevance)
+		fmt.Println("Using hybrid relevance detection (embeddings + keywords + path relevance)...")
+		relevantFileInfos, relevanceErr = relevance.IdentifyRelevantFilesWithHybridApproach(embeddingOpts)
+		if relevanceErr != nil {
+			fmt.Printf("Error with hybrid relevance detection: %v\n", relevanceErr)
+			fmt.Println("Falling back to keyword-based relevance detection...")
+
+			// Fall back to keyword-based method
+			relevanceOpts := relevance.Options{
+				Query:           query,
+				TargetPath:      absTargetPath,
+				CandidateFiles:  foundFiles,
+				MaxFilesToCheck: 20, // Consider top 20 most relevant files
+			}
+
+			relevantFileInfos, relevanceErr = relevance.IdentifyRelevantFiles(relevanceOpts)
+			if relevanceErr != nil {
+				fmt.Printf("Error identifying relevant files: %v\n", relevanceErr)
+				os.Exit(1)
+			}
+		}
+	} else if *useEmbeddings {
+		// Use embedding-based relevance detection
+		fmt.Println("Using embedding-based relevance detection for more accurate results...")
 		relevantFileInfos, relevanceErr = relevance.IdentifyRelevantFilesWithEmbeddings(embeddingOpts)
 		if relevanceErr != nil {
 			fmt.Printf("Error with embedding-based relevance detection: %v\n", relevanceErr)
