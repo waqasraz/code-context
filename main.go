@@ -77,6 +77,18 @@ func main() {
 		*multiService = true
 	}
 
+	// Debug the multi-service flag
+	fmt.Printf("DEBUG: Flag values: multiService=%t, multiServiceLong=%t\n", *multiService, *multiServiceLong)
+
+	// Manual detection of -m flag
+	for _, arg := range os.Args {
+		if arg == "-m" || arg == "--multi-service" {
+			*multiService = true
+			fmt.Println("DEBUG: Found -m or --multi-service flag, setting multiService=true")
+			break
+		}
+	}
+
 	// Manual detection of -o flag
 	outputFileName := "CODE_CONTEXT_SUMMARY.md" // Default value
 
@@ -201,6 +213,27 @@ func main() {
 
 	fmt.Printf("Found %d files and %d directories after filtering.\n", len(foundFiles), len(foundDirs))
 
+	// --- Multi-Service Mode Preparation ---
+	var serviceDirs []string
+	if *multiService {
+		fmt.Println("\nMulti-service mode detected. Identifying services...")
+
+		// Find immediate subdirectories (services)
+		for _, dir := range foundDirs {
+			// Count path separators to ensure it's an immediate subdirectory
+			if strings.Count(dir, string(os.PathSeparator)) == 0 &&
+				!strings.Contains(dir, "/") {
+				serviceDirs = append(serviceDirs, dir)
+			}
+		}
+
+		// Print service list
+		fmt.Printf("Found %d services to process:\n", len(serviceDirs))
+		for i, service := range serviceDirs {
+			fmt.Printf("  %d. %s\n", i+1, service)
+		}
+	}
+
 	// --- Relevance Identification ---
 	fmt.Println("\nIdentifying relevant files...")
 	relevanceOpts := relevance.Options{
@@ -264,21 +297,78 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Generate summaries for relevant files
-	summaries, err := llm.GenerateSummaries(provider, query, absTargetPath, relevantFiles)
-	if err != nil {
-		fmt.Printf("Error generating summaries: %v\n", err)
-		os.Exit(1)
-	}
+	// --- Process Services (Multi-Service Mode) or Files (Single-Service Mode) ---
+	if *multiService && len(serviceDirs) > 0 {
+		// Multi-service mode
+		fmt.Println("\nProcessing services one by one...")
 
-	fmt.Printf("Generated %d summaries\n", len(summaries))
+		// Map to store summaries for all services
+		allSummaries := make(map[string]map[string]string)
 
-	// --- Output Generation (Markdown) ---
-	fmt.Println("\nGenerating Markdown output...")
-	err = output.GenerateMarkdown(outputFileName, query, absTargetPath, showTreeFlag, treeString, summaries, *multiService)
-	if err != nil {
-		fmt.Printf("Error generating Markdown: %v\n", err)
-		os.Exit(1)
+		// Process each service
+		for i, service := range serviceDirs {
+			fmt.Printf("\nProcessing service %d/%d: %s\n", i+1, len(serviceDirs), service)
+
+			// Filter files for this service
+			var serviceFiles []string
+			for _, file := range relevantFiles {
+				if strings.HasPrefix(file, service+string(os.PathSeparator)) ||
+					strings.HasPrefix(file, service+"/") {
+					serviceFiles = append(serviceFiles, file)
+				}
+			}
+
+			if len(serviceFiles) == 0 {
+				fmt.Printf("No relevant files found for service: %s, skipping...\n", service)
+				continue
+			}
+
+			fmt.Printf("Found %d relevant files for service: %s\n", len(serviceFiles), service)
+
+			// Generate summaries for this service's files
+			serviceSummaries, err := llm.GenerateSummaries(provider, query, absTargetPath, serviceFiles)
+			if err != nil {
+				fmt.Printf("Error generating summaries for service %s: %v\n", service, err)
+				continue // Continue with the next service
+			}
+
+			fmt.Printf("Generated %d summaries for service: %s\n", len(serviceSummaries), service)
+			allSummaries[service] = serviceSummaries
+		}
+
+		// Merge all summaries for output generation
+		mergedSummaries := make(map[string]string)
+		for _, serviceSummary := range allSummaries {
+			for path, summary := range serviceSummary {
+				mergedSummaries[path] = summary
+			}
+		}
+
+		// --- Output Generation (Markdown) ---
+		fmt.Println("\nGenerating Markdown output...")
+		err = output.GenerateMarkdown(outputFileName, query, absTargetPath, showTreeFlag, treeString, mergedSummaries, *multiService)
+		if err != nil {
+			fmt.Printf("Error generating Markdown: %v\n", err)
+			os.Exit(1)
+		}
+	} else {
+		// Single-service mode (or multi-service mode with no services found)
+		// Generate summaries for relevant files
+		summaries, err := llm.GenerateSummaries(provider, query, absTargetPath, relevantFiles)
+		if err != nil {
+			fmt.Printf("Error generating summaries: %v\n", err)
+			os.Exit(1)
+		}
+
+		fmt.Printf("Generated %d summaries\n", len(summaries))
+
+		// --- Output Generation (Markdown) ---
+		fmt.Println("\nGenerating Markdown output...")
+		err = output.GenerateMarkdown(outputFileName, query, absTargetPath, showTreeFlag, treeString, summaries, *multiService)
+		if err != nil {
+			fmt.Printf("Error generating Markdown: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	fmt.Println("\nAnalysis complete. Output file saved to", outputFileName)

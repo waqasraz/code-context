@@ -19,7 +19,33 @@ var DefaultIgnorePatterns = []string{
 	"**/dist/**",
 	"**/build/**",
 	"**/.venv/**",
+	"**/venv/**",       // Python virtual environments
+	"**/env/**",        // Python virtual environments
+	"**/*.egg-info/**", // Python package metadata
 	"**/__pycache__/**",
+	"**/*.pyc",          // Python compiled files
+	"**/*.pyo",          // Python optimized files
+	"**/*.spec.ts",      // Test files
+	"**/*.test.ts",      // Test files
+	"**/*.spec.js",      // Test files
+	"**/*.test.js",      // Test files
+	"**/__mocks__/**",   // Mock directories
+	"**/coverage/**",    // Coverage reports
+	"**/*.json",         // Data files
+	"**/*.yaml",         // Data files
+	"**/*.yml",          // Data files
+	"**/*.xml",          // Data files
+	"**/*.csv",          // Data files
+	"**/*.toml",         // Data files
+	"**/*.ini",          // Data files
+	"**/*.min.css",      // Minified CSS files
+	"**/*.min.js",       // Minified JS files
+	"**/*.css.map",      // CSS source maps
+	"**/*.js.map",       // JS source maps
+	"**/*.map",          // All source maps
+	"**/wwwroot/lib/**", // Web libraries in ASP.NET projects
+	"**/wwwroot/css/**", // CSS files in ASP.NET projects
+	"**/wwwroot/js/**",  // JS files in ASP.NET projects
 	"**/*.log",
 	"**/*.lock",
 	"**/*.bin",

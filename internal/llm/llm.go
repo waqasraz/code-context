@@ -251,9 +251,12 @@ USER QUERY: %s
 CODE CONTENT:
 %s
 
-Provide a concise summary focusing specifically on the user's query.
+Provide a concise summary focusing specifically on the user's query. 
 Include relevant details such as functions, classes, or patterns that relate to the query.
-Keep your response under 500 words.`, filePath, query, fileContent)
+Keep your response under 500 words.
+DO NOT include recommendations, suggestions, or any advice on how to improve the code.
+DO NOT suggest tests that should be written.
+Focus ONLY on describing what the code does related to the query.`, filePath, query, fileContent)
 
 	// Create the request body for Ollama chat
 	chatRequestBody := map[string]interface{}{
