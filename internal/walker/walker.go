@@ -12,6 +12,7 @@ import (
 
 // DefaultIgnorePatterns are common patterns to ignore.
 var DefaultIgnorePatterns = []string{
+	"**/.*/**", // Any folder starting with a dot (hidden folders)
 	"**/node_modules/**",
 	"**/.git/**",
 	"**/vendor/**",
@@ -67,10 +68,17 @@ func Walk(opts Options) <-chan Result {
 		allIgnores := append([]string{}, DefaultIgnorePatterns...)
 		allIgnores = append(allIgnores, opts.IgnorePatterns...)
 
-		// Use doublestar's Walk functionality which respects gitignore style patterns
+		// Create a filesystem to walk
 		fsys := os.DirFS(opts.TargetPath)
 
-		err := doublestar.Walk(fsys, ".", func(path string, d fs.DirEntry) error {
+		// Walk the file system using filepath.WalkDir instead of doublestar.Walk
+		err := fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				// Send the error and continue walking
+				out <- Result{Path: path, Err: err}
+				return nil
+			}
+
 			// Construct the full path relative to the original target path for matching
 			fullPath := filepath.Join(opts.TargetPath, path)
 			relPath, err := filepath.Rel(opts.TargetPath, fullPath)
@@ -86,11 +94,7 @@ func Walk(opts Options) <-chan Result {
 				matchPattern := filepath.ToSlash(pattern)
 				pathToMatch := filepath.ToSlash(relPath)
 
-				// Doublestar expects patterns relative to the Walk root (".")
-				// and the path being checked should also be relative to the Walk root.
-				// If the pattern contains '/', it's treated as path-based.
-				// If not, it matches the basename.
-
+				// Use doublestar.Match for globbing
 				matched, _ := doublestar.Match(matchPattern, pathToMatch)
 
 				// Also match against the basename for patterns like '*.log'

@@ -17,12 +17,18 @@ type Node struct {
 }
 
 // Generate creates a string representation of the directory tree.
-// It takes the base path, a list of all discovered files, and all discovered dirs.
-// TODO: Adapt to accept a list of *relevant* files to mark them in the tree.
-func Generate(basePath string, allFiles []string, allDirs []string) string {
+// It takes the base path, a list of all discovered files, all discovered dirs,
+// and a list of files that are relevant to the query.
+func Generate(basePath string, allFiles []string, allDirs []string, relevantFiles []string) string {
 	root := &Node{Name: filepath.Base(basePath), Path: ".", IsDir: true}
 	nodes := make(map[string]*Node)
 	nodes["."] = root
+
+	// Create a map for quick lookup of relevant files
+	relevantMap := make(map[string]bool)
+	for _, file := range relevantFiles {
+		relevantMap[file] = true
+	}
 
 	// Add directory nodes
 	for _, dirPath := range allDirs {
@@ -58,8 +64,12 @@ func Generate(basePath string, allFiles []string, allDirs []string) string {
 			dirPath = "."
 		}
 		fileName := parts[len(parts)-1]
-		fileNode := &Node{Name: fileName, Path: filePath, IsDir: false}
-		// TODO: Mark fileNode.Relevant based on actual relevance check
+		fileNode := &Node{
+			Name:     fileName,
+			Path:     filePath,
+			IsDir:    false,
+			Relevant: relevantMap[filePath], // Mark as relevant if in the relevant files list
+		}
 		nodes[filePath] = fileNode // Add file node to map as well
 		parent.Children = append(parent.Children, fileNode)
 	}
@@ -78,7 +88,7 @@ func Generate(basePath string, allFiles []string, allDirs []string) string {
 	builder.WriteString("```\n")
 	buildTreeString(root, "", true, &builder)
 	builder.WriteString("```\n")
-	// builder.WriteString("(* Indicates files included in the summaries below)\n") // Add when relevance is implemented
+	builder.WriteString("(* Indicates files included in the summaries below)\n")
 
 	return builder.String()
 }
@@ -98,9 +108,9 @@ func buildTreeString(node *Node, prefix string, isLast bool, builder *strings.Bu
 		if node.IsDir {
 			builder.WriteString("/")
 		}
-		// if node.Relevant && !node.IsDir { // Mark relevant files
-		// 	builder.WriteString(" (*)")
-		// }
+		if node.Relevant && !node.IsDir { // Mark relevant files
+			builder.WriteString(" (*)")
+		}
 		builder.WriteString("\n")
 	}
 
