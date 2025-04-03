@@ -37,6 +37,9 @@ func main() {
 	llmEndpoint := flag.String("llm-endpoint", "", "Endpoint for the LLM service (or use LLM_ENDPOINT env var).")
 	llmProvider := flag.String("llm-provider", "", "LLM provider to use: 'openai', 'local', 'unified', or empty for placeholder.")
 	llmModel := flag.String("llm-model", "", "Model name to use with the LLM provider.")
+	useEmbeddings := flag.Bool("use-embeddings", false, "Use embedding-based relevance detection for more accurate results.")
+	embeddingModel := flag.String("embedding-model", "nomic-embed-text", "Model to use for embeddings when --use-embeddings is enabled.")
+	embeddingURL := flag.String("embedding-url", "http://localhost:11434/api/embeddings", "URL for embedding API when --use-embeddings is enabled.")
 	var llmHeaders stringSlice
 	flag.Var(&llmHeaders, "llm-header", "Additional headers for LLM API requests in format 'key:value' (repeatable).")
 	var ignorePatterns stringSlice
@@ -179,6 +182,11 @@ func main() {
 	fmt.Printf("LLM Model: %s\n", *llmModel)
 	fmt.Printf("LLM API Key Set: %t\n", *llmApiKey != "")
 	fmt.Printf("LLM Endpoint Set: %t\n", *llmEndpoint != "")
+	fmt.Printf("Using Embeddings: %t\n", *useEmbeddings)
+	if *useEmbeddings {
+		fmt.Printf("Embedding Model: %s\n", *embeddingModel)
+		fmt.Printf("Embedding URL: %s\n", *embeddingURL)
+	}
 	fmt.Println("---------------------")
 
 	// --- Core Logic ---
@@ -213,6 +221,41 @@ func main() {
 
 	fmt.Printf("Found %d files and %d directories after filtering.\n", len(foundFiles), len(foundDirs))
 
+	// Manual detection of --use-embeddings flag if not set via flag package
+	for _, arg := range os.Args {
+		if arg == "--use-embeddings" {
+			*useEmbeddings = true
+			fmt.Println("DEBUG: Found --use-embeddings flag, enabling embedding-based relevance detection")
+			break
+		}
+	}
+
+	// Manual detection of --embedding-model flag
+	for i, arg := range os.Args {
+		if strings.HasPrefix(arg, "--embedding-model=") {
+			*embeddingModel = strings.TrimPrefix(arg, "--embedding-model=")
+			fmt.Printf("DEBUG: Found --embedding-model= syntax: %s\n", *embeddingModel)
+			break
+		} else if arg == "--embedding-model" && i+1 < len(os.Args) {
+			*embeddingModel = os.Args[i+1]
+			fmt.Printf("DEBUG: Found --embedding-model with space syntax: %s\n", *embeddingModel)
+			break
+		}
+	}
+
+	// Manual detection of --embedding-url flag
+	for i, arg := range os.Args {
+		if strings.HasPrefix(arg, "--embedding-url=") {
+			*embeddingURL = strings.TrimPrefix(arg, "--embedding-url=")
+			fmt.Printf("DEBUG: Found --embedding-url= syntax: %s\n", *embeddingURL)
+			break
+		} else if arg == "--embedding-url" && i+1 < len(os.Args) {
+			*embeddingURL = os.Args[i+1]
+			fmt.Printf("DEBUG: Found --embedding-url with space syntax: %s\n", *embeddingURL)
+			break
+		}
+	}
+
 	// --- Multi-Service Mode Preparation ---
 	var serviceDirs []string
 	if *multiService {
@@ -236,17 +279,54 @@ func main() {
 
 	// --- Relevance Identification ---
 	fmt.Println("\nIdentifying relevant files...")
-	relevanceOpts := relevance.Options{
-		Query:           query,
-		TargetPath:      absTargetPath,
-		CandidateFiles:  foundFiles,
-		MaxFilesToCheck: 20, // Consider top 20 most relevant files
-	}
 
-	relevantFileInfos, err := relevance.IdentifyRelevantFiles(relevanceOpts)
-	if err != nil {
-		fmt.Printf("Error identifying relevant files: %v\n", err)
-		os.Exit(1)
+	var relevantFileInfos []relevance.FileInfo
+	var relevanceErr error
+
+	if *useEmbeddings {
+		fmt.Println("Using embedding-based relevance detection for more accurate results...")
+		embeddingOpts := relevance.EmbeddingOptions{
+			Query:           query,
+			TargetPath:      absTargetPath,
+			CandidateFiles:  foundFiles,
+			MaxFilesToCheck: 20, // Consider top 20 most relevant files
+			EmbeddingModel:  *embeddingModel,
+			EmbeddingURL:    *embeddingURL,
+		}
+
+		relevantFileInfos, relevanceErr = relevance.IdentifyRelevantFilesWithEmbeddings(embeddingOpts)
+		if relevanceErr != nil {
+			fmt.Printf("Error with embedding-based relevance detection: %v\n", relevanceErr)
+			fmt.Println("Falling back to keyword-based relevance detection...")
+
+			// Fall back to keyword-based method
+			relevanceOpts := relevance.Options{
+				Query:           query,
+				TargetPath:      absTargetPath,
+				CandidateFiles:  foundFiles,
+				MaxFilesToCheck: 20, // Consider top 20 most relevant files
+			}
+
+			relevantFileInfos, relevanceErr = relevance.IdentifyRelevantFiles(relevanceOpts)
+			if relevanceErr != nil {
+				fmt.Printf("Error identifying relevant files: %v\n", relevanceErr)
+				os.Exit(1)
+			}
+		}
+	} else {
+		// Use the original keyword-based method
+		relevanceOpts := relevance.Options{
+			Query:           query,
+			TargetPath:      absTargetPath,
+			CandidateFiles:  foundFiles,
+			MaxFilesToCheck: 20, // Consider top 20 most relevant files
+		}
+
+		relevantFileInfos, relevanceErr = relevance.IdentifyRelevantFiles(relevanceOpts)
+		if relevanceErr != nil {
+			fmt.Printf("Error identifying relevant files: %v\n", relevanceErr)
+			os.Exit(1)
+		}
 	}
 
 	// Extract just the paths from the FileInfo objects

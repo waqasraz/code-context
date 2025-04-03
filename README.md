@@ -55,6 +55,9 @@ Where:
 - `--llm-header <KEY:VALUE>`: Additional headers for LLM API requests (repeatable, format: 'key:value')
 - `--ignore <PATTERN>`: Glob patterns for files/directories to ignore (repeatable)
 - `--show-tree`: Include a directory tree structure in the output
+- `--use-embeddings`: Use embedding-based relevance detection for more accurate results
+- `--embedding-model <MODEL>`: Model to use for embeddings (default: "nomic-embed-text")
+- `--embedding-url <URL>`: URL for embedding API (default: "http://localhost:11434/api/embeddings")
 
 ### Environment Variables
 
@@ -117,6 +120,16 @@ code-context ./my-project/ "Explain the user authentication flow" \
 ```bash
 code-context ./my-project/ "Find all HTTP endpoints" \
   --ignore "**/test/**" --ignore "**/docs/**"
+```
+
+### Use embedding-based relevance detection
+
+Use AI embeddings to find semantically relevant files, providing more accurate results than keyword matching:
+
+```bash
+code-context ./my-project/ "Explain the authentication flow" \
+  --use-embeddings \
+  --embedding-model nomic-embed-text
 ```
 
 ## LLM Integration
