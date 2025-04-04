@@ -15,6 +15,7 @@ var DefaultIgnorePatterns = []string{
 	"**/.*/**", // Any folder starting with a dot (hidden folders)
 	"**/node_modules/**",
 	"**/.git/**",
+	"**/.idea/**",
 	"**/vendor/**",
 	"**/dist/**",
 	"**/build/**",

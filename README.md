@@ -46,20 +46,20 @@ Where:
 
 ### Options
 
-- `-m, --multi-service`: Treat each immediate subdirectory as a distinct service
 - `-o, --output <FILENAME>`: Specify the output Markdown file name (default: `CODE_CONTEXT_SUMMARY.md`)
-- `--llm-api-key <KEY>`: API key for the LLM service (or use LLM_API_KEY env var)
-- `--llm-endpoint <URL>`: Endpoint for the LLM service (or use LLM_ENDPOINT env var)
-- `--llm-provider <PROVIDER>`: LLM provider to use: 'openai', 'local', 'unified', or empty for placeholder
-- `--llm-model <MODEL>`: Model name to use with the LLM provider
-- `--llm-header <KEY:VALUE>`: Additional headers for LLM API requests (repeatable, format: 'key:value')
-- `--ignore <PATTERN>`: Glob patterns for files/directories to ignore (repeatable)
-- `--show-tree`: Include a directory tree structure in the output
-- `--use-embeddings`: Use embedding-based relevance detection for more accurate results
-- `--use-hybrid`: Use hybrid approach combining embeddings with keywords and path relevance (default: true)
-- `--no-hybrid`: Disable hybrid relevance detection and use pure embeddings or keywords
-- `--embedding-model <MODEL>`: Model to use for embeddings (default: "nomic-embed-text")
-- `--embedding-url <URL>`: URL for embedding API (default: "http://localhost:11434/api/embeddings")
+- `--llm-api-key <KEY>`: API key for the LLM service (also used for Gemini/OpenAI/Anthropic embedding models).
+- `--llm-endpoint <URL>`: Endpoint for the LLM service (or use LLM_ENDPOINT env var).
+- `--llm-provider <PROVIDER>`: LLM provider to use: 'openai', 'local', 'unified', or empty for placeholder.
+- `--llm-model <MODEL>`: Model name to use with the LLM provider.
+- `--llm-header <KEY:VALUE>`: Additional headers for LLM API requests (repeatable, format: 'key:value').
+- `--ignore <PATTERN>`: Glob patterns for files/directories to ignore (repeatable).
+- `--show-tree`: Include a directory tree structure in the output.
+- `--use-embeddings`: Use embedding-based relevance detection for more accurate results.
+- `--use-hybrid`: Use hybrid approach combining embeddings with keywords and path relevance (default: true).
+- `--no-hybrid`: Disable hybrid relevance detection and use pure embeddings or keywords.
+- `--embedding-provider <PROVIDER>`: Embedding provider: 'ollama', 'gemini', 'openai' (soon), 'anthropic' (soon). Default: 'ollama'.
+- `--embedding-model <MODEL>`: Model to use for embeddings (e.g., "nomic-embed-text", "gemini-embedding-001"). Default: "nomic-embed-text".
+- `--embedding-endpoint <URL>`: Endpoint URL for embedding API (used for 'ollama'/'local' provider). Default: "http://localhost:11434/api/embeddings".
 
 ### Environment Variables
 
@@ -78,10 +78,15 @@ Instead of passing LLM configuration flags, you can set the following environmen
 code-context ./my-service/ "Explain the Kafka integration points"
 ```
 
-### Analyze multiple services within a parent directory for database usage
+### Analyze multiple directories with the PowerShell script
 
-```bash
-code-context ./all-services/ "Summarize database usage" -m
+```powershell
+# Process all subdirectories in a parent directory
+.\run-multiple-dirs.ps1 -QueryString "general working of service and different components" -ParentDirectory "C:\Users\waqas\Documents\OneStop2.0"
+
+# With custom LLM settings
+.\run-multiple-dirs.ps1 -QueryString "Find authentication flows" -ParentDirectory ".\projects\" -LLMProvider gemini -LLMModel "gemini-pro" -ApiKey "your-api-key"
+
 ```
 
 ### Specify output file name
@@ -126,22 +131,46 @@ code-context ./my-project/ "Find all HTTP endpoints" \
 
 ### Use embedding-based relevance detection
 
-Use AI embeddings to find semantically relevant files, providing more accurate results than keyword matching:
+Use AI embeddings to find semantically relevant files, providing more accurate results than keyword matching.
 
 ```bash
+# Example using default Ollama provider
 code-context ./my-project/ "Explain the authentication flow" \
   --use-embeddings \
-  --embedding-model nomic-embed-text
+  --embedding-model nomic-embed-text \
+  --embedding-endpoint http://localhost:11434/api/embeddings # Optional if using default
+
+# Example using Gemini Embedding Model (requires API Key)
+code-context ./my-project/ "Explain the authentication flow" \
+  --use-embeddings \
+  --embedding-provider gemini \
+  --embedding-model gemini-embedding-001 \
+  --llm-api-key your-google-api-key
+
+# Example using OpenAI (coming soon)
+# code-context ./my-project/ "Explain the authentication flow" \
+#   --use-embeddings \
+#   --embedding-provider openai \
+#   --embedding-model text-embedding-ada-002 \
+#   --llm-api-key your-openai-api-key
 ```
 
 ### Use hybrid relevance detection (recommended)
 
-Combines the power of embeddings with traditional keyword matching and path relevance for optimal results:
+Combines the power of embeddings with traditional keyword matching and path relevance for optimal results.
 
 ```bash
+# Example using default Ollama provider with Hybrid Search
 code-context ./my-project/ "Explain the authentication flow" \
   --use-hybrid \
-  --embedding-model llama3-embed
+  --embedding-model nomic-embed-text
+
+# Example using Gemini Embedding Model with Hybrid Search (requires API Key)
+code-context ./my-project/ "Explain the authentication flow" \
+  --use-hybrid \
+  --embedding-provider gemini \
+  --embedding-model gemini-embedding-001 \
+  --llm-api-key your-google-api-key
 ```
 
 ## LLM Integration

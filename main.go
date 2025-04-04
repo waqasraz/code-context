@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/waqasraz/code-context/internal/llm"
@@ -28,8 +29,6 @@ func (i *stringSlice) Set(value string) error {
 
 func main() {
 	// --- Define Flags ---
-	multiService := flag.Bool("m", false, "Treat immediate subdirectories as distinct services.")
-	multiServiceLong := flag.Bool("multi-service", false, "Treat immediate subdirectories as distinct services (long form).")
 	// Define these flags for documentation in --help, but we'll handle them manually
 	_ = flag.String("o", "CODE_CONTEXT_SUMMARY.md", "Specify the output Markdown file name.")
 	_ = flag.String("output", "CODE_CONTEXT_SUMMARY.md", "Specify the output Markdown file name (long form).")
@@ -40,7 +39,8 @@ func main() {
 	useEmbeddings := flag.Bool("use-embeddings", false, "Use embedding-based relevance detection for more accurate results.")
 	useHybridSearch := flag.Bool("use-hybrid", true, "Use hybrid approach combining embeddings with traditional relevance metrics.")
 	embeddingModel := flag.String("embedding-model", "nomic-embed-text", "Model to use for embeddings when --use-embeddings is enabled.")
-	embeddingURL := flag.String("embedding-url", "http://localhost:11434/api/embeddings", "URL for embedding API when --use-embeddings is enabled.")
+	embeddingEndpoint := flag.String("embedding-endpoint", "http://localhost:11434/api/embeddings", "Endpoint URL for embedding API (e.g., Ollama, other HTTP-based).")
+	embeddingProvider := flag.String("embedding-provider", "ollama", "Embedding provider to use: 'ollama', 'gemini', 'openai', 'anthropic'.")
 	var llmHeaders stringSlice
 	flag.Var(&llmHeaders, "llm-header", "Additional headers for LLM API requests in format 'key:value' (repeatable).")
 	var ignorePatterns stringSlice
@@ -49,7 +49,11 @@ func main() {
 	_ = flag.Bool("show-tree", false, "Include a directory tree structure in the output.")
 
 	// --- Parse Flags ---
+	// Call Parse early to populate standard flags
 	flag.Parse()
+
+	// Debug: Print value of llmApiKey immediately after flag.Parse()
+	fmt.Printf("DEBUG: llmApiKey after flag.Parse(): '%s'\n", *llmApiKey)
 
 	// Debug: Show raw command line arguments
 	fmt.Println("DEBUG: Command line arguments:")
@@ -76,32 +80,50 @@ func main() {
 	targetPath := args[0]
 	query := args[1]
 
-	// --- Handle Long/Short Flag Aliases ---
-	if *multiServiceLong && !*multiService {
-		*multiService = true
-	}
-
-	// Debug the multi-service flag
-	fmt.Printf("DEBUG: Flag values: multiService=%t, multiServiceLong=%t\n", *multiService, *multiServiceLong)
-
-	// Manual detection of -m flag
-	for _, arg := range os.Args {
-		if arg == "-m" || arg == "--multi-service" {
-			*multiService = true
-			fmt.Println("DEBUG: Found -m or --multi-service flag, setting multiService=true")
-			break
-		}
-	}
-
 	// Manual detection of -o flag
-	outputFileName := "CODE_CONTEXT_SUMMARY.md" // Default value
+	outputFileNameProvided := false
+	var outputFileName string
 
 	// Search through os.Args manually for -o or --output
 	for i, arg := range os.Args {
 		if (arg == "-o" || arg == "--output") && i+1 < len(os.Args) {
 			outputFileName = os.Args[i+1]
+			outputFileNameProvided = true
+			fmt.Printf("DEBUG: User provided output file: %s\n", outputFileName)
 			break
 		}
+	}
+
+	// If no output file was provided, generate a default name
+	if !outputFileNameProvided {
+		baseName := filepath.Base(targetPath) // Use absTargetPath for consistency
+		if baseName == "." || baseName == ".." || baseName == "/" || baseName == "\\" {
+			// Attempt to get the directory name of the absolute path
+			parentDir := filepath.Dir(targetPath) // Use absTargetPath here as well
+			baseName = filepath.Base(parentDir)
+			if baseName == "." || baseName == ".." || baseName == "/" || baseName == "\\" {
+				baseName = "project" // Fallback to generic name
+			}
+		}
+		// Clean the base name to be safe for filenames
+		cleanBaseName := strings.ReplaceAll(baseName, " ", "_") // Replace spaces
+		// Further cleaning: remove characters not suitable for filenames
+		re := regexp.MustCompile(`[^a-zA-Z0-9_\-\.]`)
+		cleanBaseName = re.ReplaceAllString(cleanBaseName, "")
+
+		if cleanBaseName == "" {
+			cleanBaseName = "project"
+		}
+
+		// Extract a keyword from the query
+		queryKeyword := relevance.ExtractQueryKeyword(query)
+		cleanQueryKeyword := re.ReplaceAllString(queryKeyword, "") // Clean the keyword too
+		if cleanQueryKeyword == "" {
+			cleanQueryKeyword = "query" // Fallback if cleaning removes everything
+		}
+
+		outputFileName = fmt.Sprintf("%s_%s_summary.md", cleanBaseName, cleanQueryKeyword)
+		fmt.Printf("DEBUG: Using default output file name: %s\n", outputFileName)
 	}
 
 	// Manual detection of --show-tree flag
@@ -115,14 +137,23 @@ func main() {
 
 	// --- Get LLM Config from Environment Variables if flags are not set ---
 	if *llmApiKey == "" {
-		*llmApiKey = os.Getenv("LLM_API_KEY")
-	}
-	if *llmEndpoint == "" {
-		*llmEndpoint = os.Getenv("LLM_ENDPOINT")
+		// Manual parsing for API key with equals sign
+		for _, arg := range os.Args {
+			if strings.HasPrefix(arg, "--llm-api-key=") {
+				*llmApiKey = strings.TrimPrefix(arg, "--llm-api-key=")
+				fmt.Printf("DEBUG: Found --llm-api-key= syntax: %s (masked)\n", "***API-KEY-FOUND***")
+				break
+			}
+		}
+
+		// Still empty? Try environment
+		if *llmApiKey == "" {
+			*llmApiKey = os.Getenv("LLM_API_KEY")
+		}
 	}
 
 	// Try to detect --llm-provider and --llm-model if flag package didn't catch them
-	if *llmProvider == "" {
+	if *llmProvider == "" { // Only run if flag.Parse didn't set it
 		// Check for different formats: --llm-provider=value or --llm-provider value
 		for i, arg := range os.Args {
 			if strings.HasPrefix(arg, "--llm-provider=") {
@@ -175,7 +206,6 @@ func main() {
 	fmt.Println("--- Configuration ---")
 	fmt.Printf("Target Path: %s\n", absTargetPath)
 	fmt.Printf("Query: %s\n", query)
-	fmt.Printf("Multi-Service Mode: %t\n", *multiService)
 	fmt.Printf("Output File: %s\n", outputFileName)
 	fmt.Printf("Ignore Patterns: %v\n", ignorePatterns)
 	fmt.Printf("Show Tree: %t\n", showTreeFlag)
@@ -186,8 +216,9 @@ func main() {
 	fmt.Printf("Using Embeddings: %t\n", *useEmbeddings)
 	fmt.Printf("Using Hybrid Search: %t\n", *useHybridSearch)
 	if *useEmbeddings || *useHybridSearch {
+		fmt.Printf("Embedding Provider: %s\n", *embeddingProvider)
 		fmt.Printf("Embedding Model: %s\n", *embeddingModel)
-		fmt.Printf("Embedding URL: %s\n", *embeddingURL)
+		fmt.Printf("Embedding Endpoint: %s\n", *embeddingEndpoint)
 	}
 	fmt.Println("---------------------")
 
@@ -257,37 +288,29 @@ func main() {
 		}
 	}
 
-	// Manual detection of --embedding-url flag
+	// Manual detection of --embedding-provider flag
 	for i, arg := range os.Args {
-		if strings.HasPrefix(arg, "--embedding-url=") {
-			*embeddingURL = strings.TrimPrefix(arg, "--embedding-url=")
-			fmt.Printf("DEBUG: Found --embedding-url= syntax: %s\n", *embeddingURL)
+		if strings.HasPrefix(arg, "--embedding-provider=") {
+			*embeddingProvider = strings.TrimPrefix(arg, "--embedding-provider=")
+			fmt.Printf("DEBUG: Found --embedding-provider= syntax: %s\n", *embeddingProvider)
 			break
-		} else if arg == "--embedding-url" && i+1 < len(os.Args) {
-			*embeddingURL = os.Args[i+1]
-			fmt.Printf("DEBUG: Found --embedding-url with space syntax: %s\n", *embeddingURL)
+		} else if arg == "--embedding-provider" && i+1 < len(os.Args) {
+			*embeddingProvider = os.Args[i+1]
+			fmt.Printf("DEBUG: Found --embedding-provider with space syntax: %s\n", *embeddingProvider)
 			break
 		}
 	}
 
-	// --- Multi-Service Mode Preparation ---
-	var serviceDirs []string
-	if *multiService {
-		fmt.Println("\nMulti-service mode detected. Identifying services...")
-
-		// Find immediate subdirectories (services)
-		for _, dir := range foundDirs {
-			// Count path separators to ensure it's an immediate subdirectory
-			if strings.Count(dir, string(os.PathSeparator)) == 0 &&
-				!strings.Contains(dir, "/") {
-				serviceDirs = append(serviceDirs, dir)
-			}
-		}
-
-		// Print service list
-		fmt.Printf("Found %d services to process:\n", len(serviceDirs))
-		for i, service := range serviceDirs {
-			fmt.Printf("  %d. %s\n", i+1, service)
+	// Manual detection of --embedding-endpoint flag
+	for i, arg := range os.Args {
+		if strings.HasPrefix(arg, "--embedding-endpoint=") {
+			*embeddingEndpoint = strings.TrimPrefix(arg, "--embedding-endpoint=")
+			fmt.Printf("DEBUG: Found --embedding-endpoint= syntax: %s\n", *embeddingEndpoint)
+			break
+		} else if arg == "--embedding-endpoint" && i+1 < len(os.Args) {
+			*embeddingEndpoint = os.Args[i+1]
+			fmt.Printf("DEBUG: Found --embedding-endpoint with space syntax: %s\n", *embeddingEndpoint)
+			break
 		}
 	}
 
@@ -297,14 +320,22 @@ func main() {
 	var relevantFileInfos []relevance.FileInfo
 	var relevanceErr error
 
+	// Add extra debug log before creating options
+	fmt.Printf("DEBUG: Initializing EmbeddingOptions with Provider: '%s', Model: '%s', Endpoint: '%s'\n", *embeddingProvider, *embeddingModel, *embeddingEndpoint)
+
+	// Extra debug to verify final values
+	fmt.Printf("DEBUG: FINAL CONFIRMATION - Will use embedding model: '%s' with provider: '%s'\n", *embeddingModel, *embeddingProvider)
+
 	// Configure embedding options if using embeddings or hybrid search
 	embeddingOpts := relevance.EmbeddingOptions{
+		Provider:        *embeddingProvider,
 		Query:           query,
 		TargetPath:      absTargetPath,
 		CandidateFiles:  foundFiles,
 		MaxFilesToCheck: 20, // Consider top 20 most relevant files
-		EmbeddingModel:  *embeddingModel,
-		EmbeddingURL:    *embeddingURL,
+		Model:           *embeddingModel,
+		Endpoint:        *embeddingEndpoint,
+		APIKey:          *llmApiKey,
 	}
 
 	if *useHybridSearch {
@@ -415,78 +446,21 @@ func main() {
 		os.Exit(1)
 	}
 
-	// --- Process Services (Multi-Service Mode) or Files (Single-Service Mode) ---
-	if *multiService && len(serviceDirs) > 0 {
-		// Multi-service mode
-		fmt.Println("\nProcessing services one by one...")
+	// Single-service mode - Generate summaries for relevant files
+	summaries, err := llm.GenerateSummaries(provider, query, absTargetPath, relevantFiles)
+	if err != nil {
+		fmt.Printf("Error generating summaries: %v\n", err)
+		os.Exit(1)
+	}
 
-		// Map to store summaries for all services
-		allSummaries := make(map[string]map[string]string)
+	fmt.Printf("Generated %d summaries\n", len(summaries))
 
-		// Process each service
-		for i, service := range serviceDirs {
-			fmt.Printf("\nProcessing service %d/%d: %s\n", i+1, len(serviceDirs), service)
-
-			// Filter files for this service
-			var serviceFiles []string
-			for _, file := range relevantFiles {
-				if strings.HasPrefix(file, service+string(os.PathSeparator)) ||
-					strings.HasPrefix(file, service+"/") {
-					serviceFiles = append(serviceFiles, file)
-				}
-			}
-
-			if len(serviceFiles) == 0 {
-				fmt.Printf("No relevant files found for service: %s, skipping...\n", service)
-				continue
-			}
-
-			fmt.Printf("Found %d relevant files for service: %s\n", len(serviceFiles), service)
-
-			// Generate summaries for this service's files
-			serviceSummaries, err := llm.GenerateSummaries(provider, query, absTargetPath, serviceFiles)
-			if err != nil {
-				fmt.Printf("Error generating summaries for service %s: %v\n", service, err)
-				continue // Continue with the next service
-			}
-
-			fmt.Printf("Generated %d summaries for service: %s\n", len(serviceSummaries), service)
-			allSummaries[service] = serviceSummaries
-		}
-
-		// Merge all summaries for output generation
-		mergedSummaries := make(map[string]string)
-		for _, serviceSummary := range allSummaries {
-			for path, summary := range serviceSummary {
-				mergedSummaries[path] = summary
-			}
-		}
-
-		// --- Output Generation (Markdown) ---
-		fmt.Println("\nGenerating Markdown output...")
-		err = output.GenerateMarkdown(outputFileName, query, absTargetPath, showTreeFlag, treeString, mergedSummaries, *multiService)
-		if err != nil {
-			fmt.Printf("Error generating Markdown: %v\n", err)
-			os.Exit(1)
-		}
-	} else {
-		// Single-service mode (or multi-service mode with no services found)
-		// Generate summaries for relevant files
-		summaries, err := llm.GenerateSummaries(provider, query, absTargetPath, relevantFiles)
-		if err != nil {
-			fmt.Printf("Error generating summaries: %v\n", err)
-			os.Exit(1)
-		}
-
-		fmt.Printf("Generated %d summaries\n", len(summaries))
-
-		// --- Output Generation (Markdown) ---
-		fmt.Println("\nGenerating Markdown output...")
-		err = output.GenerateMarkdown(outputFileName, query, absTargetPath, showTreeFlag, treeString, summaries, *multiService)
-		if err != nil {
-			fmt.Printf("Error generating Markdown: %v\n", err)
-			os.Exit(1)
-		}
+	// --- Output Generation (Markdown) ---
+	fmt.Println("\nGenerating Markdown output...")
+	err = output.GenerateMarkdown(outputFileName, query, absTargetPath, showTreeFlag, treeString, summaries)
+	if err != nil {
+		fmt.Printf("Error generating Markdown: %v\n", err)
+		os.Exit(1)
 	}
 
 	fmt.Println("\nAnalysis complete. Output file saved to", outputFileName)

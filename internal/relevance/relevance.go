@@ -167,3 +167,20 @@ func sortFilesByScore(files []FileInfo) {
 		}
 	}
 }
+
+// ExtractQueryKeyword attempts to extract a single representative keyword from the query.
+func ExtractQueryKeyword(query string) string {
+	keywords := extractKeywords(query) // Reuse existing keyword extraction
+	if len(keywords) == 0 {
+		return "query" // Fallback keyword
+	}
+
+	// Simple heuristic: pick the longest keyword
+	longestKeyword := keywords[0]
+	for _, kw := range keywords {
+		if len(kw) > len(longestKeyword) {
+			longestKeyword = kw
+		}
+	}
+	return longestKeyword
+}

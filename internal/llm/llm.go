@@ -46,7 +46,6 @@ func NewProvider(cfg Config) (Provider, error) {
 	case "gemini":
 		return &adapters.GeminiAdapter{
 			APIKey:    cfg.APIKey,
-			Endpoint:  cfg.Endpoint,
 			ModelName: cfg.ModelName,
 		}, nil
 	case "local":

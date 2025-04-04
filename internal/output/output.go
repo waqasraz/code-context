@@ -6,38 +6,60 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
-// GenerateMarkdown creates the final Markdown output file
+// GenerateMarkdown generates a Markdown file with the analysis results
 func GenerateMarkdown(
-	outputPath string,
+	outputFileName string,
 	query string,
-	targetPath string,
-	showTree bool,
+	basePath string,
+	includeTree bool,
 	treeString string,
 	summaries map[string]string,
-	multiService bool,
 ) error {
-	file, err := os.Create(outputPath)
+	// Create or truncate the output file
+	outputFile, err := os.Create(outputFileName)
 	if err != nil {
-		return fmt.Errorf("failed to create output file: %w", err)
+		return fmt.Errorf("error creating output file: %w", err)
 	}
-	defer file.Close()
+	defer outputFile.Close()
 
-	// Write the header
-	fmt.Fprintln(file, "# Code Context Summary")
-	fmt.Fprintln(file)
-	fmt.Fprintf(file, "**Query:** %s\n", query)
-	fmt.Fprintf(file, "**Target Directory:** %s\n", targetPath)
-	fmt.Fprintln(file)
-	fmt.Fprintln(file, "---")
-	fmt.Fprintln(file)
+	// Start with a header
+	fmt.Fprintf(outputFile, "# Code Context Summary\n\n")
+	fmt.Fprintf(outputFile, "**Query:** %s\n\n", query)
+	fmt.Fprintf(outputFile, "**Target Directory:** %s\n\n", basePath)
+	fmt.Fprintf(outputFile, "**Generated on:** %s\n\n", time.Now().Format("2006-01-02 15:04:05"))
 
-	// If multi-service, organize by immediate subdirectories
-	if multiService {
-		generateMultiServiceOutput(file, targetPath, showTree, treeString, summaries)
-	} else {
-		generateSingleServiceOutput(file, showTree, treeString, summaries)
+	// Include directory tree if requested
+	if includeTree && treeString != "" {
+		fmt.Fprintf(outputFile, "## Directory Structure\n\n")
+		fmt.Fprintf(outputFile, "```\n%s\n```\n\n", treeString)
+	}
+
+	// Summary of relevant files
+	fmt.Fprintf(outputFile, "## Relevant Files Summary\n\n")
+	fmt.Fprintf(outputFile, "Found %d relevant files for the query.\n\n", len(summaries))
+
+	// Write each file summary
+	fmt.Fprintf(outputFile, "## File Summaries\n\n")
+
+	// Sort file paths for consistent output
+	var filePaths []string
+	for path := range summaries {
+		filePaths = append(filePaths, path)
+	}
+	sort.Strings(filePaths)
+
+	for _, filePath := range filePaths {
+		summary := summaries[filePath]
+
+		// Add a section for each file
+		fmt.Fprintf(outputFile, "### %s\n\n", filePath)
+		fmt.Fprintf(outputFile, "%s\n\n", summary)
+
+		// Add a line break between file summaries
+		fmt.Fprintf(outputFile, "---\n\n")
 	}
 
 	return nil
