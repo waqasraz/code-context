@@ -1,0 +1,1 @@
+.\code-context.exe .  "what is this project about" --llm-provider=local --llm-model=llama3.2 --embedding-model llama3.2
