@@ -66,6 +66,7 @@ var DefaultIgnorePatterns = []string{
 	"**/*.gz",
 	"**/*.rar",
 	"**/*.7z",
+	"**/.env", // Environment files
 	// Add other common binary/non-source file extensions or build artifacts
 }
 
