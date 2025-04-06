@@ -8,7 +8,7 @@ param(
     
     [string]$LLMProvider = "local",
     
-    [string]$LLMModel = "llama3.2",
+    [string]$LLMModel = "gemma3:12b",
     
     [string]$EmbeddingProvider = "ollama",
     
@@ -16,7 +16,11 @@ param(
     
     [string]$ApiKey = "",
     
-    [string[]]$DirectoriesToSkip = @(".idea", ".git", "node_modules")
+    [string[]]$DirectoriesToSkip = @(".idea", ".git", "node_modules"),
+    
+    [string[]]$SpecificFolders = @(),
+    
+    [switch]$Interactive
 )
 
 # Verify parent directory exists
@@ -25,10 +29,66 @@ if (-not (Test-Path -Path $ParentDirectory)) {
     exit 1
 }
 
-# Get all immediate subdirectories
-$directories = Get-ChildItem -Path $ParentDirectory -Directory | 
+# Get all available subdirectories
+$availableDirectories = Get-ChildItem -Path $ParentDirectory -Directory | 
     Where-Object { $DirectoriesToSkip -notcontains $_.Name } |
     Select-Object -ExpandProperty FullName
+
+# If neither SpecificFolders nor Interactive is specified, process all directories
+if ($SpecificFolders.Count -eq 0 -and -not $Interactive) {
+    $directories = $availableDirectories
+}
+# If specific folders are provided, filter to only those directories
+elseif ($SpecificFolders.Count -gt 0) {
+    $directories = $availableDirectories | Where-Object {
+        $dirName = Split-Path -Path $_ -Leaf
+        $SpecificFolders -contains $dirName
+    }
+    
+    # Check if any specified folders were not found
+    $foundDirNames = $directories | ForEach-Object { Split-Path -Path $_ -Leaf }
+    $notFound = $SpecificFolders | Where-Object { $foundDirNames -notcontains $_ }
+    if ($notFound.Count -gt 0) {
+        Write-Warning "The following specified folders were not found: $($notFound -join ', ')"
+    }
+}
+# If interactive mode is enabled, let the user select directories
+else {
+    $dirOptions = @()
+    $index = 1
+    $availableDirectories | ForEach-Object {
+        $dirName = Split-Path -Path $_ -Leaf
+        $dirOptions += [PSCustomObject]@{
+            Index = $index
+            Name = $dirName
+            Path = $_
+        }
+        $index++
+    }
+    
+    # Display available directories
+    Write-Host "Available directories:" -ForegroundColor Cyan
+    $dirOptions | ForEach-Object {
+        Write-Host "  [$($_.Index)] $($_.Name)"
+    }
+    
+    # Get user selection
+    Write-Host "`nEnter directory numbers to process (comma-separated) or 'all' for all directories:"
+    $selection = Read-Host
+    
+    if ($selection -eq "all") {
+        $directories = $availableDirectories
+    }
+    else {
+        $selectedIndices = $selection -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '^\d+$' } | ForEach-Object { [int]$_ }
+        $directories = $dirOptions | Where-Object { $selectedIndices -contains $_.Index } | Select-Object -ExpandProperty Path
+        
+        if ($directories.Count -eq 0) {
+            Write-Error "No valid directories selected. Exiting."
+            exit 1
+        }
+    }
+}
 
 # Display info
 Write-Host "Will process these directories with query: '$QueryString'"
@@ -66,3 +126,5 @@ foreach ($dir in $directories) {
 }
 
 Write-Host "All directories processed successfully!" -ForegroundColor Green 
+
+
