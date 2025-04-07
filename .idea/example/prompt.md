@@ -1,1 +1,1 @@
-.\code-context.exe .  "what is this project about" --llm-provider=local --llm-model=llama3.2 --embedding-model llama3.2
+.\code-context.exe .  "what is this project about" --llm-provider=local --llm-model=gemma3:12b --embedding-model llama3.2

@@ -48,6 +48,12 @@ func NewProvider(cfg Config) (Provider, error) {
 			APIKey:    cfg.APIKey,
 			ModelName: cfg.ModelName,
 		}, nil
+	case "deepseek":
+		return &adapters.DeepSeekAdapter{
+			APIKey:    cfg.APIKey,
+			Endpoint:  cfg.Endpoint,
+			ModelName: cfg.ModelName,
+		}, nil
 	case "local":
 		return &LocalProvider{
 			Endpoint:  cfg.Endpoint,
