@@ -36,7 +36,7 @@ type EmbeddingOptions struct {
 	MaxFilesToCheck int      // Maximum number of files to return
 	Model           string   // The embedding model to use
 	Endpoint        string   // The endpoint URL (for Ollama/HTTP-based providers)
-	APIKey          string   // API Key (for Gemini, OpenAI, etc.)
+	APIKey          string   // API Key (for Gemini, OpenAI, etc.) - can be different from LLM API key
 }
 
 // DefaultEmbeddingOptions returns default configuration values.

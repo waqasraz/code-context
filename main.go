@@ -36,6 +36,7 @@ func main() {
 	llmEndpoint := flag.String("llm-endpoint", "", "Endpoint for the LLM service (or use LLM_ENDPOINT env var).")
 	llmProvider := flag.String("llm-provider", "", "LLM provider to use: 'openai', 'local', 'unified', or empty for placeholder.")
 	llmModel := flag.String("llm-model", "", "Model name to use with the LLM provider.")
+	embeddingApiKey := flag.String("embedding-api-key", "", "API key for the embedding model, if different from LLM API key.")
 	useEmbeddings := flag.Bool("use-embeddings", false, "Use embedding-based relevance detection for more accurate results.")
 	useHybridSearch := flag.Bool("use-hybrid", true, "Use hybrid approach combining embeddings with traditional relevance metrics.")
 	embeddingModel := flag.String("embedding-model", "nomic-embed-text", "Model to use for embeddings when --use-embeddings is enabled.")
@@ -314,6 +315,40 @@ func main() {
 		}
 	}
 
+	// Manual detection of --embedding-api-key flag
+	embeddingApiKeyValue := *embeddingApiKey
+	for i, arg := range os.Args {
+		if strings.HasPrefix(arg, "--embedding-api-key=") {
+			embeddingApiKeyValue = strings.TrimPrefix(arg, "--embedding-api-key=")
+			fmt.Printf("DEBUG: Found --embedding-api-key= syntax\n")
+			break
+		} else if arg == "--embedding-api-key" && i+1 < len(os.Args) {
+			embeddingApiKeyValue = os.Args[i+1]
+			fmt.Printf("DEBUG: Found --embedding-api-key with space syntax\n")
+			break
+		}
+	}
+
+	// If embedding API key is not set, fall back to LLM API key for backward compatibility
+	if embeddingApiKeyValue == "" {
+		// Only use LLM API key as fallback for providers that need one
+		if *embeddingProvider != "ollama" && *embeddingProvider != "local" {
+			embeddingApiKeyValue = *llmApiKey
+			if embeddingApiKeyValue != "" {
+				fmt.Println("DEBUG: Using LLM API key for embeddings since no dedicated embedding API key was provided")
+			} else {
+				fmt.Printf("WARNING: No embedding API key provided for provider '%s' which requires an API key\n", *embeddingProvider)
+			}
+		}
+	} else {
+		// Only show this message for providers that need an API key
+		if *embeddingProvider != "ollama" && *embeddingProvider != "local" {
+			fmt.Println("DEBUG: Using separate embedding API key")
+		} else {
+			fmt.Printf("NOTE: Embedding API key provided but not needed for provider '%s'\n", *embeddingProvider)
+		}
+	}
+
 	// --- Relevance Identification ---
 	fmt.Println("\nIdentifying relevant files...")
 
@@ -335,7 +370,7 @@ func main() {
 		MaxFilesToCheck: 20, // Consider top 20 most relevant files
 		Model:           *embeddingModel,
 		Endpoint:        *embeddingEndpoint,
-		APIKey:          *llmApiKey,
+		APIKey:          embeddingApiKeyValue,
 	}
 
 	if *useHybridSearch {

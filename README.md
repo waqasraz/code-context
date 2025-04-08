@@ -47,7 +47,7 @@ Where:
 ### Options
 
 - `-o, --output <FILENAME>`: Specify the output Markdown file name (default: `CODE_CONTEXT_SUMMARY.md`)
-- `--llm-api-key <KEY>`: API key for the LLM service (also used for Gemini/OpenAI/Anthropic embedding models).
+- `--llm-api-key <KEY>`: API key for the LLM service (required for OpenAI, Gemini, Anthropic, but not for local providers like Ollama).
 - `--llm-endpoint <URL>`: Endpoint for the LLM service (or use LLM_ENDPOINT env var).
 - `--llm-provider <PROVIDER>`: LLM provider to use: 'openai', 'local', 'unified', or empty for placeholder.
 - `--llm-model <MODEL>`: Model name to use with the LLM provider.
@@ -59,6 +59,7 @@ Where:
 - `--no-hybrid`: Disable hybrid relevance detection and use pure embeddings or keywords.
 - `--embedding-provider <PROVIDER>`: Embedding provider: 'ollama', 'gemini', 'openai' (soon), 'anthropic' (soon). Default: 'ollama'.
 - `--embedding-model <MODEL>`: Model to use for embeddings (e.g., "nomic-embed-text", "gemini-embedding-001"). Default: "nomic-embed-text".
+- `--embedding-api-key <KEY>`: API key for the embedding model, if different from LLM API key (required for Gemini, OpenAI, Anthropic, but not for Ollama).
 - `--embedding-endpoint <URL>`: Endpoint URL for embedding API (used for 'ollama'/'local' provider). Default: "http://localhost:11434/api/embeddings".
 
 ### Environment Variables
@@ -117,7 +118,6 @@ code-context ./my-project/ "Explain the user authentication flow" \
   --llm-provider unified \
   --llm-endpoint "https://api.litellm.ai/v1/chat/completions" \
   --llm-model "gpt-4" \
-  --llm-api-key "your-api-key" \
   --llm-header "x-api-version:v1" \
   --llm-header "x-provider:anthropic"
 ```
@@ -145,7 +145,10 @@ code-context ./my-project/ "Explain the authentication flow" \
   --use-embeddings \
   --embedding-provider gemini \
   --embedding-model gemini-embedding-001 \
-  --llm-api-key your-google-api-key
+  --embedding-api-key your-embedding-api-key \
+  --llm-provider openai \
+  --llm-model gpt-4 \
+  --llm-api-key your-openai-api-key
 
 # Example using OpenAI (coming soon)
 # code-context ./my-project/ "Explain the authentication flow" \
@@ -165,12 +168,15 @@ code-context ./my-project/ "Explain the authentication flow" \
   --use-hybrid \
   --embedding-model nomic-embed-text
 
-# Example using Gemini Embedding Model with Hybrid Search (requires API Key)
+# Example using Gemini Embedding Model with Hybrid Search and separate API keys
 code-context ./my-project/ "Explain the authentication flow" \
   --use-hybrid \
   --embedding-provider gemini \
   --embedding-model gemini-embedding-001 \
-  --llm-api-key your-google-api-key
+  --embedding-api-key your-gemini-api-key \
+  --llm-provider anthropic \
+  --llm-model claude-3-sonnet \
+  --llm-api-key your-anthropic-api-key
 ```
 
 ## LLM Integration
