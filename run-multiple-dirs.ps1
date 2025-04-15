@@ -16,6 +16,10 @@ param(
     
     [string]$ApiKey = "",
     
+    [string]$EmbeddingApiKey = "",
+    
+    [string]$EmbeddingEndpoint = "",
+    
     [string[]]$DirectoriesToSkip = @(".idea", ".git", "node_modules"),
     
     [string[]]$SpecificFolders = @(),
@@ -94,6 +98,9 @@ else {
 Write-Host "Will process these directories with query: '$QueryString'"
 Write-Host "LLM: $LLMProvider / $LLMModel"
 Write-Host "Embedding: $EmbeddingProvider / $EmbeddingModel"
+if ($EmbeddingEndpoint) {
+    Write-Host "Embedding Endpoint: $EmbeddingEndpoint"
+}
 Write-Host "Directories to process:" -ForegroundColor Cyan
 $directories | ForEach-Object { Write-Host "  $_" }
 
@@ -116,6 +123,14 @@ foreach ($dir in $directories) {
     
     if ($ApiKey -ne "") {
         $command += " --llm-api-key=$ApiKey"
+    }
+    
+    if ($EmbeddingApiKey -ne "") {
+        $command += " --embedding-api-key=$EmbeddingApiKey"
+    }
+    
+    if ($EmbeddingEndpoint -ne "") {
+        $command += " --embedding-endpoint=$EmbeddingEndpoint"
     }
     
     # Execute the command
